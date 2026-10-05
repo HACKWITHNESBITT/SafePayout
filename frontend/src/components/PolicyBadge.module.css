@@ -1,0 +1,114 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.badge.size-sm {
+  padding: 1px 6px;
+  font-size: 0.6875rem;
+}
+
+.badge.size-lg {
+  padding: 4px 12px;
+  font-size: 0.8125rem;
+}
+
+.icon {
+  font-size: 0.75em;
+  line-height: 1;
+}
+
+.runBadge {
+  padding: 4px 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.amount {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Policy decision colors */
+.approved {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.review {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.blocked {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.pending {
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+
+.rejected {
+  background-color: #fecaca;
+  color: #991b1b;
+}
+
+.unknown {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+.unclaimed {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.success {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.failed {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.refunded {
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+
+.reversed {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+.draft {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+.executing {
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+
+.completed {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.partial {
+  background-color: #fef3c7;
+  color: #92400e;
+}

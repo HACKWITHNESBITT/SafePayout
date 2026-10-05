@@ -30,6 +30,7 @@ AI-assisted batch payout manager built on PayPal Payouts. An LLM cleans and flag
 ### Prerequisites
 
 - Python 3.11+
+- Node.js 18+
 - PayPal Developer Sandbox account
 - Anthropic API key
 
@@ -43,8 +44,11 @@ cd safepayout
 python -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
+# Install backend dependencies
 pip install -e ".[dev]"
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
 
 # Copy environment template
 cp .env.example .env
@@ -84,14 +88,31 @@ The API will be available at `http://localhost:8000`
 - Health check: `GET /health`
 - API docs: `http://localhost:8000/docs`
 
+### Running the Frontend
+
+```bash
+# From project root
+cd frontend && npm run dev
+```
+
+The frontend will be available at `http://localhost:5173` (or next available port).
+
+The Vite dev server proxies API requests to `http://localhost:8000` by default. Set `VITE_API_URL` to override.
+
 ### Running Tests
 
 ```bash
-# Run all tests
+# Backend tests
 pytest backend/tests -v
 
-# Run with coverage
+# Backend tests with coverage
 pytest backend/tests --cov=app --cov-report=term-missing
+
+# Frontend tests
+cd frontend && npm test
+
+# Frontend tests in watch mode
+cd frontend && npm run test:watch
 ```
 
 ### Sample Data
@@ -99,6 +120,8 @@ pytest backend/tests --cov=app --cov-report=term-missing
 Test files are in `backend/sample_data/`:
 - `messy_payouts.csv` - CSV with duplicates, malformed emails, unusual amounts
 - `messy_text.txt` - Free-text payout instructions
+
+The frontend has a "Load Sample Data" button on the New Run screen for one-click demo setup.
 
 ## API Endpoints
 
@@ -136,22 +159,35 @@ safepayout/
 │   │   └── main.py       # FastAPI app
 │   ├── tests/            # Pytest tests
 │   └── sample_data/      # Test CSV/text files
-├── frontend/             # React + Vite + TS (later phase)
+├── frontend/
+│   ├── src/
+│   │   ├── api/          # API client & TanStack Query hooks
+│   │   ├── components/   # Reusable UI components
+│   │   ├── pages/        # Page components (NewRun, Review)
+│   │   ├── types/        # TypeScript types matching backend schemas
+│   │   ├── utils/        # Formatting, helpers
+│   │   ├── test/         # Test setup & utilities
+│   │   ├── App.tsx       # Routing
+│   │   └── main.tsx      # Entry point with providers
+│   ├── index.html
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vitest.config.ts
 ├── docs/                 # Architecture, demo script
-└── pyproject.toml        # Dependencies
+└── pyproject.toml        # Backend dependencies
 ```
 
 ### Code Quality
 
 ```bash
-# Lint
+# Backend
 ruff check backend/
-
-# Format
 ruff format backend/
-
-# Type check
 mypy backend/app/
+
+# Frontend
+cd frontend && npm run lint
+cd frontend && npm test
 ```
 
 ## PayPal Sandbox Setup
