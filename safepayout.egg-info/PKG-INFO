@@ -1,0 +1,196 @@
+Metadata-Version: 2.4
+Name: safepayout
+Version: 0.1.0
+Summary: AI-assisted batch payout manager with PayPal integration
+License: MIT
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: fastapi>=0.109.0
+Requires-Dist: uvicorn[standard]>=0.27.0
+Requires-Dist: pydantic>=2.6.0
+Requires-Dist: pydantic-settings>=2.1.0
+Requires-Dist: sqlalchemy>=2.0.0
+Requires-Dist: alembic>=1.13.0
+Requires-Dist: httpx>=0.26.0
+Requires-Dist: anthropic>=0.18.0
+Requires-Dist: python-multipart>=0.0.6
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: pandas>=2.1.0
+Requires-Dist: email-validator>=2.1.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+Requires-Dist: respx>=0.21.0; extra == "dev"
+Requires-Dist: httpx>=0.26.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: mypy>=1.7.0; extra == "dev"
+Dynamic: license-file
+
+# SafePayout
+
+AI-assisted batch payout manager built on PayPal Payouts. An LLM cleans and flags messy payout sheets, a rules engine enforces limits, and a human approves before money moves. Python/FastAPI, PayPal sandbox.
+
+## Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Input     │────▶│   LLM       │────▶│  Policy     │────▶│  Human      │
+│  (CSV/Text) │     │  Parser     │     │  Engine     │     │  Review     │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                           │                   │                   │
+                           ▼                   ▼                   ▼
+                    ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+                    │  Normalized │     │  Decisions  │     │  Approved/  │
+                    │  Payees     │     │  + Reasons  │     │  Rejected   │
+                    └─────────────┘     └─────────────┘     └─────────────┘
+                                                                       │
+                                                                       ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Audit      │◀────│  PayPal     │◀────│  Execute    │◀────│  Approved   │
+│  Summary    │     │  Payouts    │     │  Batch      │     │  Items      │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+```
+
+**Core Principle**: The LLM proposes. The rules enforce. The human approves. PayPal executes.
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- PayPal Developer Sandbox account
+- Anthropic API key
+
+### Installation
+
+```bash
+# Clone and enter the project
+cd safepayout
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -e ".[dev]"
+
+# Copy environment template
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+### Configuration
+
+Edit `.env` with your credentials:
+
+```bash
+# PayPal Sandbox (get from developer.paypal.com)
+PAYPAL_CLIENT_ID=your_sandbox_client_id
+PAYPAL_CLIENT_SECRET=your_sandbox_client_secret
+PAYPAL_WEBHOOK_ID=your_webhook_id
+
+# Anthropic API (get from console.anthropic.com)
+ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_MODEL=claude-sonnet-5-5
+
+# Database (SQLite for dev, Postgres for prod)
+DATABASE_URL=sqlite:///./safepayout.db
+```
+
+### Running the Backend
+
+```bash
+# Start the API server
+uvicorn app.main:app --reload --app-dir backend
+
+# Or from project root
+cd backend && uvicorn app.main:app --reload
+```
+
+The API will be available at `http://localhost:8000`
+
+- Health check: `GET /health`
+- API docs: `http://localhost:8000/docs`
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest backend/tests -v
+
+# Run with coverage
+pytest backend/tests --cov=app --cov-report=term-missing
+```
+
+### Sample Data
+
+Test files are in `backend/sample_data/`:
+- `messy_payouts.csv` - CSV with duplicates, malformed emails, unusual amounts
+- `messy_text.txt` - Free-text payout instructions
+
+## API Endpoints
+
+### Payout Runs
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/runs` | Create a new payout run |
+| GET | `/runs/{id}` | Get run details |
+| GET | `/runs` | List runs |
+| POST | `/runs/{id}/items/{item_id}/decision` | Approve/reject item |
+| POST | `/runs/{id}/execute` | Execute approved batch |
+| GET | `/runs/{id}/audit` | Get audit summary |
+
+### Webhooks
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/webhooks/paypal` | PayPal webhook receiver |
+
+## Development
+
+### Project Structure
+
+```
+safepayout/
+├── backend/
+│   ├── app/
+│   │   ├── api/          # FastAPI routers
+│   │   ├── services/     # Business logic
+│   │   ├── models.py     # SQLAlchemy models
+│   │   ├── schemas.py    # Pydantic models
+│   │   ├── config.py     # Settings
+│   │   ├── db.py         # Database setup
+│   │   └── main.py       # FastAPI app
+│   ├── tests/            # Pytest tests
+│   └── sample_data/      # Test CSV/text files
+├── frontend/             # React + Vite + TS (later phase)
+├── docs/                 # Architecture, demo script
+└── pyproject.toml        # Dependencies
+```
+
+### Code Quality
+
+```bash
+# Lint
+ruff check backend/
+
+# Format
+ruff format backend/
+
+# Type check
+mypy backend/app/
+```
+
+## PayPal Sandbox Setup
+
+1. Go to [developer.paypal.com](https://developer.paypal.com)
+2. Create a sandbox app to get Client ID and Secret
+3. Create a webhook URL (use ngrok for local: `ngrok http 8000`)
+4. Subscribe to events: `PAYMENT.PAYOUTSBATCH.*`, `PAYMENT.PAYOUTS-ITEM.*`
+5. Copy Webhook ID to `.env`
+
+## License
+
+MIT License - see LICENSE file

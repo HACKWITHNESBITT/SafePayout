@@ -1,0 +1,9 @@
+name,email,amount,currency,note
+Amina Diallo,amina.diallo@example.com,480,USD,"40 hrs at $12/hr"
+Brian O'Connor,brian.oconnor@example.com,300,USD,flat fee
+Carlos Mendez,carlos.mendez@example.com,1250,USD,project completion
+Amina Diallo,amina.diallo@example.com,480,USD,"duplicate entry"
+Diana Prince,diana.prince@invalid-email,200,USD,malformed email
+Ethan Hunt,ethan.hunt@example.com,5000,USD,unusually large
+Fiona Gallagher,fiona.g@example.com,50,USD,small payment
+Grace Hopper,grace.hopper@example.com,480,USD,"40 hrs at $12/hr"
