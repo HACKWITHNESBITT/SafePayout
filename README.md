@@ -198,6 +198,107 @@ cd frontend && npm test
 4. Subscribe to events: `PAYMENT.PAYOUTSBATCH.*`, `PAYMENT.PAYOUTS-ITEM.*`
 5. Copy Webhook ID to `.env`
 
+---
+
+## About the Project
+
+### Inspiration
+
+The inspiration for SafePayout came from the common pain points in business payout operations. Managing multiple payouts manually, tracking approvals, and integrating with payment processors like PayPal creates significant overhead for businesses. Many small to medium enterprises struggle with efficiently batch-processing payments while maintaining proper audit trails and compliance. The idea was to build a tool that leverages AI to automate the tedious parts of payout management while giving humans control over decisions that require judgment.
+
+### What it does
+
+SafePayout is an **AI-assisted batch payout manager with PayPal integration** that streamlines the entire payout workflow:
+
+- **CSV/Text Upload**: Users can upload CSV files or free-text payout instructions
+- **AI Parsing**: The system automatically parses payee information (names, emails, amounts, currencies, notes)
+- **Policy Engine**: Built-in policy evaluation handles auto-approvals, blocks, and flags based on configurable rules
+- **AI Review**: Additional AI analysis flags potentially problematic payouts with explanations
+- **PayPal Integration**: Creates payout batches in PayPal Sandbox and tracks status
+- **Audit Trail**: Complete audit events logging for all actions (run creation, item decisions, webhook events)
+- **Review Interface**: Dashboard to review pending items, approve/reject, and execute payouts
+- **CSV Download**: Export audit events and details for record-keeping
+
+The system manages payout runs through statuses: DRAFT → REVIEW → EXECUTING → COMPLETED/FAILED, with full visibility into auto-approved, needs-review, and blocked items.
+
+### How we built it
+
+The project was built as a full-stack application with a **FastAPI backend** and **React frontend**:
+
+**Backend (FastAPI)**
+- **Database**: SQLAlchemy 2.0 with Alembic migrations, using SQLite for storage
+- **API Routes**: 14 endpoints for run management, item decisions, approval execution, and PayPal webhooks
+- **AI Services**: Three service modules:
+  - `ai_parser`: Parses CSV/free-text input into structured payee data
+  - `ai_review`: Additional AI analysis for flagging issues
+  - `paypal`: PayPal API client for batch creation and webhook verification
+- **Policy Engine**: Configurable policy rules for auto-approval, blocking, and review decisions
+- **Lifespan Management**: Database initialization on startup, proper cleanup on shutdown
+
+**Frontend (React + Vite)**
+- **Query Management**: TanStack React Query for data fetching and state management
+- **Routing**: React Router DOM for navigation between runs, audit, and review pages
+- **UI**: Served from Vite-built static files in the `dist/` directory
+- **API Client**: Fetch-based client communicating with the FastAPI backend at `http://localhost:8000`
+
+**Architecture**
+- Environment configuration via Pydantic Settings with `.env` file support
+- CORS middleware configured for development origin (`http://localhost:3000`)
+- Async context manager for FastAPI lifespan (DB init/cleanup)
+- Editable install via `pip install -e .` for development workflow
+
+### Challenges we ran into
+
+1. **CORS Configuration**: Initially struggled with Cross-Origin Resource Sharing between the React frontend (port 3000) and FastAPI backend (port 8000). Fixed by configuring `CORSMiddleware` with environment-based allowOrigins.
+
+2. **PayPal Webhook Verification**: The webhook endpoint requires PayPal transmission headers (`PayPal-Transmission-Id`, `PayPal-Transmission-Time`, `PayPal-Cert-Url`, `PayPal-Transmission-Sig`, `PayPal-Auth-Algo`) for signature verification. Without proper PayPal Sandbox credentials, webhook testing was limited.
+
+3. **AI Parsing Edge Cases**: The AI parser (`parse_payouts`) had to handle various input formats - CSV files, free-text descriptions, different currency formats, and edge cases like missing fields or malformed entries.
+
+4. **Policy Decision Logic**: Designing the policy engine to correctly categorize items into AUTO_APPROVED, NEEDS_REVIEW, BLOCKED, and PENDING states required careful consideration of business rules and threshold values.
+
+5. **State Management**: Synchronizing the backend run status with frontend UI state, especially during the execute flow which involves PayPal API calls and async status updates.
+
+6. **Database Schema Design**: Creating the relational model with PayoutRun, PayoutItem, AuditEvent, and policy decision tables that properly track the lifecycle of each payout from creation through execution.
+
+### Accomplishments that we're proud of
+
+- **End-to-End Workflow**: Successfully built a complete payout management pipeline from CSV upload to PayPal batch execution with proper status tracking
+- **AI Integration**: Integrated multiple AI services (parsing, review) that work together to reduce manual review overhead
+- **Policy Flexibility**: Configurable policy engine that can be adapted to different business rules without code changes
+- **Full Audit Trail**: Comprehensive audit event logging that captures all significant actions for compliance and debugging
+- **PayPal Integration**: Functional PayPal Sandbox API integration including batch creation and webhook handling
+- **Modern Stack**: FastAPI 0.109+ with SQLAlchemy 2.0 and async/await patterns, paired with a React frontend using TanStack Query
+- **Deployable**: Editable install makes development iterative, and the architecture supports deployment with uvicorn and production-ready configuration
+
+### What we learned
+
+- **FastAPI Maturity**: FastAPI's type system and automatic documentation (OpenAPI) significantly reduced development time and helped catch integration errors early
+- **SQLAlchemy 2.0**: New features like `ident=True` and improved async support, though the migration from 1.x required careful attention to session management
+- **Pydantic Settings**: Environment-based configuration with `extra="ignore"` provides clean config management without breaking on unexpected env vars
+- **React Query Essentials**: TanStack React Query's `queryKeys`, `enabled` guards, and refetch strategies are essential for reliable data fetching in CRUD applications
+- **PayPal API Realities**: The difference between PayPal Sandbox and production environments, required headers for webhook verification, and the batch vs. item-level event types
+- **Async Best Practices**: Proper use of `await` with httpx for HTTP calls, async SQLAlchemy sessions, and avoiding blocking operations in async FastAPI endpoints
+- **Full-Stack Integration**: The importance of matching CORS origins, error handling boundaries, and loading states when connecting frontend and backend
+- **Database Design Patterns**: Relational modeling for tracking state machines (run statuses, item decisions, audit events) with proper foreign key relationships
+
+### What's next for SafePayout
+
+- **Multi-User Support**: Authentication and authorization to allow multiple users per organization with role-based access
+- **PayPal Production**: Full production PayPal integration with proper credentials and live API endpoints
+- **Email Notifications**: SMTP integration to notify users of run status changes, pending items, and execution results
+- **Template System**: Pre-built payout templates for common scenarios (employee payments, vendor payouts, refunds)
+- **Advanced Analytics**: Dashboards with charts showing payout trends, approval rates, and financial summaries
+- **API Rate Limiting**: Add rate limiting and request validation for production deployments
+- **Export Formats**: Additional export options (Excel, JSON) beyond CSV for audit data
+- **Slack Integration**: Real-time notifications and webhook responses sent to Slack channels
+- **Docker Deployment**: Containerized deployment with proper database migrations and environment configuration
+- **Enhanced Policy Rules**: More sophisticated policy evaluation with regex patterns, amount thresholds, and custom rule expressions
+
+---
+
+*Built with ❤️ using FastAPI, SQLAlchemy, Pydantic, React, and AI assistance*
+
 ## License
 
 MIT License - see LICENSE file

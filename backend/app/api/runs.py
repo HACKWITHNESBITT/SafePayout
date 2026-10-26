@@ -65,6 +65,10 @@
 #    is_csv = (file.filename or "").endswith(".csv")
 #
 #    # Parse with AI
+    try:
+        parsed = parse_payouts(content, is_csv=is_csv)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 #    parsed = parse_payouts(content, is_csv=is_csv)
 #
 #    # Create items
