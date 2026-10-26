@@ -297,8 +297,6 @@ The project was built as a full-stack application with a **FastAPI backend** and
 
 ---
 
-*Built with ❤️ using FastAPI, SQLAlchemy, Pydantic, React, and AI assistance*
-
 ## License
 
 MIT License - see LICENSE file
