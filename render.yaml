@@ -31,9 +31,10 @@ services:
           property: connectionString
     healthCheckPath: /health
 
-  - type: static
+  - type: web
     name: safepayout-frontend
     env: static
+    runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
@@ -54,6 +55,7 @@ services:
     plan: free
 
 # Note: Render will create the Postgres database, and the API service reads from DATABASE_URL.
+
 databases:
   - name: safepayout-db
     databaseName: safepayout
