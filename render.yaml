@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: safepayout-api
+    env: python
+    plan: free
+    rootDir: .
+    buildCommand: pip install --upgrade pip && pip install -e .
+    startCommand: sh -c "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: CORS_ORIGINS
+        value: https://safepayout-frontend.onrender.com
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: safepayout-db
+          property: connectionString
+    healthCheckPath: /health
+
+  - type: static
+    name: safepayout-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://safepayout-api.onrender.com
+
+  - type: pserv
+    name: safepayout-worker
+    env: python
+    rootDir: .
+    buildCommand: pip install --upgrade pip && pip install -e .
+    startCommand: sh -c "cd backend && python -m compileall app"
+    plan: free
+
+# Note: Render will create the Postgres database, and the API service reads from DATABASE_URL.
+databases:
+  - name: safepayout-db
+    databaseName: safepayout
+    user: safepayout

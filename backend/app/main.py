@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.db import engine, init_db
 
 settings = get_settings()
+origins = settings.allowed_origins or ["*"]
 
 
 @asynccontextmanager
@@ -26,7 +27,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.app_env == "development" else [],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

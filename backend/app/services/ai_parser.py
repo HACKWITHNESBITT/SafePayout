@@ -1,104 +1,200 @@
-import json
+import base64
+import hashlib
 import logging
+import time
+from dataclasses import dataclass
 from decimal import Decimal
 
-import google.generativeai as genai
-from pydantic import ValidationError
+import httpx
 
 from app.config import get_settings
-from app.schemas import ParsedPayee, ParsedPayouts
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class AIParser:
-    def __init__(self, client=None):
-        self.gemini_key = settings.gemini_api_key or settings.anthropic_api_key or ""
-        if not self.gemini_key:
-            logger.warning("Gemini API key not configured; AI parsing will be unavailable")
-        self.model = settings.gemini_model or settings.anthropic_model or "gemini-1.5-flash"
-        
-        # Configure Gemini
-        try:
-            genai.configure(api_key=self.gemini_key)
-            self.model_obj = genai.GenerativeModel(self.model)
-            logger.info(f"Gemini configured with model: {self.model}")
-        except Exception as e:
-            logger.error(f"Failed to configure Gemini: {e}")
-            self.model_obj = None
+@dataclass
+class PayPalToken:
+    access_token: str
+    expires_at: float
+    token_type: str = "Bearer"
 
-    def _load_system_prompt(self) -> str:
-        try:
-            with open("backend/app/prompts/parser_system.md") as f:
-                return f.read()
-        except FileNotFoundError:
-            logger.warning("Parser system prompt not found, using default")
-            return "Extract payees from input. Return JSON array with name, email, amount, currency, note."
+    def is_expired(self, buffer_seconds: int = 60) -> bool:
+        return time.time() >= (self.expires_at - buffer_seconds)
 
-    def parse(self, raw_input: str, is_csv: bool = False) -> ParsedPayouts:
-        """
-        Parse raw CSV or text input into structured payees.
-        Retries once on validation failure.
-        Raises ValueError if AI parsing is unavailable.
-        """
-        if not self.model_obj:
-            raise ValueError("Gemini AI not configured. Check GEMINI_API_KEY in .env.")
-        user_prompt = self._build_user_prompt(raw_input, is_csv)
 
-        for attempt in range(2):
-            try:
-                response = self.model_obj.generate_content(user_prompt)
-                content = response.text
-                parsed = self._parse_and_validate(content)
-                logger.info(f"Successfully parsed {len(parsed.payees)} payees on attempt {attempt + 1}")
-                return parsed
-            except (json.JSONDecodeError, ValidationError) as e:
-                logger.warning(f"Parse attempt {attempt + 1} failed: {e}")
-                if attempt == 1:
-                    raise ValueError(f"Failed to parse after 2 attempts: {e}") from e
-            except Exception as e:
-                logger.warning(f"Gemini API error on attempt {attempt + 1}: {e}")
-                if attempt == 1:
-                    raise ValueError(f"Gemini API error: {str(e)}") from e
+@dataclass
+class PayoutItem:
+    amount: Decimal
+    currency: str
+    receiver: str
+    note: str
+    sender_item_id: str
+    recipient_type: str = "EMAIL"
 
-        raise ValueError("Unexpected parse failure")
 
-    def _build_user_prompt(self, raw_input: str, is_csv: bool) -> str:
-        if is_csv:
-            return f"Parse this CSV into payees:\n```\n{raw_input}\n```"
-        return f"Parse this free-text payout instruction:\n```\n{raw_input}\n```"
+@dataclass
+class PayoutBatchResponse:
+    batch_header: dict
+    items: list[dict]
 
-    def _parse_and_validate(self, content: str) -> ParsedPayouts:
-        data = json.loads(content)
 
-        if isinstance(data, list):
-            payees_data = data
-        elif isinstance(data, dict) and "payees" in data:
-            payees_data = data["payees"]
-        else:
-            raise ValueError(f"Unexpected response format: {type(data)}")
+class PayPalClient:
+    """Minimal PayPal client used to keep the app import-safe in production."""
 
-        payees = []
-        for p in payees_data:
-            amount = Decimal(str(p.get("amount", "0")))
-            payees.append(
-                ParsedPayee(
-                    name=p.get("name", "").strip(),
-                    email=p.get("email", "").strip().lower(),
-                    amount=amount,
-                    currency=p.get("currency", "USD").upper(),
-                    note=p.get("note"),
-                )
+    def __init__(self):
+        self.client_id = settings.paypal_client_id
+        self.client_secret = settings.paypal_client_secret
+        self.base_url = settings.paypal_base_url
+        self.webhook_id = settings.paypal_webhook_id
+        self._token: PayPalToken | None = None
+        self._client = httpx.AsyncClient(timeout=30.0)
+
+    async def _get_token(self) -> PayPalToken:
+        if not self.client_id or not self.client_secret:
+            raise RuntimeError("PayPal credentials are not configured.")
+
+        auth = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
+        headers = {
+            "Authorization": f"Basic {auth}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        data = {"grant_type": "client_credentials"}
+
+        response = await self._client.post(
+            f"{self.base_url}/v1/oauth2/token",
+            headers=headers,
+            data=data,
+        )
+        response.raise_for_status()
+        token_data = response.json()
+
+        self._token = PayPalToken(
+            access_token=token_data["access_token"],
+            expires_at=time.time() + token_data["expires_in"],
+            token_type=token_data.get("token_type", "Bearer"),
+        )
+        logger.info("Obtained new PayPal access token")
+        return self._token
+
+    async def _authenticated_request(
+        self,
+        method: str,
+        path: str,
+        json_data: dict | None = None,
+        headers: dict | None = None,
+    ) -> httpx.Response:
+        token = await self._get_token()
+        request_headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "Content-Type": "application/json",
+            "PayPal-Request-Id": f"req_{int(time.time() * 1000)}",
+        }
+        if headers:
+            request_headers.update(headers)
+
+        url = f"{self.base_url}{path}"
+        response = await self._client.request(method, url, headers=request_headers, json=json_data)
+        return response
+
+    async def create_payout_batch(
+        self,
+        sender_batch_id: str,
+        items: list[PayoutItem],
+        email_subject: str = "You have a payout!",
+        email_message: str = "You have received a payment.",
+    ) -> PayoutBatchResponse:
+        if not self.client_id or not self.client_secret:
+            raise RuntimeError("PayPal credentials are not configured.")
+
+        payout_items = []
+        for item in items:
+            payout_items.append(
+                {
+                    "recipient_type": item.recipient_type,
+                    "amount": {"value": f"{item.amount:.2f}", "currency": item.currency},
+                    "receiver": item.receiver,
+                    "note": item.note,
+                    "sender_item_id": item.sender_item_id,
+                }
             )
 
-        return ParsedPayouts(
-            payees=payees,
-            raw_input_summary=f"Parsed {len(payees)} payees",
+        payload = {
+            "sender_batch_header": {
+                "sender_batch_id": sender_batch_id,
+                "email_subject": email_subject,
+                "email_message": email_message,
+            },
+            "items": payout_items,
+        }
+
+        response = await self._authenticated_request("POST", "/v1/payments/payouts", json_data=payload)
+        if response.status_code == 401 and self._token:
+            self._token = None
+            response = await self._authenticated_request("POST", "/v1/payments/payouts", json_data=payload)
+
+        response.raise_for_status()
+        data = response.json()
+        return PayoutBatchResponse(
+            batch_header=data.get("batch_header", {}),
+            items=data.get("items", []),
         )
 
+    async def get_payout_batch(self, payout_batch_id: str) -> dict:
+        response = await self._authenticated_request("GET", f"/v1/payments/payouts/{payout_batch_id}")
+        response.raise_for_status()
+        return response.json()
 
-def parse_payouts(raw_input: str, is_csv: bool = False) -> ParsedPayouts:
-    """Convenience function for single-use parsing."""
-    parser = AIParser()
-    return parser.parse(raw_input, is_csv)
+    async def get_payout_item(self, payout_item_id: str) -> dict:
+        response = await self._authenticated_request("GET", f"/v1/payments/payouts-item/{payout_item_id}")
+        response.raise_for_status()
+        return response.json()
+
+    async def verify_webhook_signature(
+        self,
+        transmission_id: str,
+        timestamp: str,
+        webhook_id: str,
+        event_body: str,
+        cert_url: str,
+        actual_signature: str,
+    ) -> bool:
+        if not webhook_id or not cert_url or not actual_signature:
+            logger.warning("PayPal webhook verification skipped: missing required signature fields.")
+            return False
+
+        payload = f"{transmission_id}|{timestamp}|{webhook_id}|{hashlib.sha256(event_body.encode()).hexdigest()}"
+
+        try:
+            cert_response = await self._client.get(cert_url)
+            cert_response.raise_for_status()
+            cert_pem = cert_response.text
+
+            from cryptography.hazmat.backends import default_backend
+            from cryptography.hazmat.primitives import hashes, serialization
+            from cryptography.hazmat.primitives.asymmetric import padding
+
+            public_key = serialization.load_pem_public_key(cert_pem.encode(), backend=default_backend())
+            public_key.verify(
+                base64.b64decode(actual_signature),
+                payload.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+            return True
+        except Exception as exc:  # pragma: no cover - defensive path for invalid webhook messages
+            logger.warning(f"Webhook signature verification failed: {exc}")
+            return False
+
+    async def close(self):
+        await self._client.aclose()
+
+
+_paypal_client: PayPalClient | None = None
+
+
+def get_paypal_client() -> PayPalClient:
+    global _paypal_client
+    if _paypal_client is None:
+        _paypal_client = PayPalClient()
+    return _paypal_client

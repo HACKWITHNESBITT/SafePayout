@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=[".env", "backend/.env", "frontend/.env"],
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     paypal_webhook_id: str = ""
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
 
-    anthropic_api_key: str = ""  # backwards compat
-    gemini_api_key: str = ""  # Google Gemini key
+    anthropic_api_key: str = ""
+    gemini_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5-5"
     gemini_model: str = "gemini-1.5-flash"
 
@@ -25,6 +25,11 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     log_level: str = "INFO"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 @lru_cache
